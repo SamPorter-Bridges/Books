@@ -1,429 +1,247 @@
-我来给你讲清楚，这些包在 Linux 下编译 Qt 时，每个都有明确作用，不安装就会报错或缺功能。
+# Linux Qt 5.15.5 aarch64 编译指南
 
-------
+---
 
-# 一、编译工具类（必装）
+## 一、编译依赖检查
 
-| 包名              | 作用                                                   |
+### 1. 编译工具类（必装）
+
+| 包名              | 作用 |
 | ----------------- | ------------------------------------------------------ |
-| `build-essential` | 提供基本编译工具（gcc、g++、make 等），Qt 编译核心依赖 |
-| `perl`            | Qt 的 configure 脚本和一些工具依赖 Perl 脚本           |
-| `python3`         | Qt 5 的某些工具和脚本（尤其是 QtWebEngine）需要 Python |
+| `build-essential` | 提供 gcc/g++/make 等基础工具 |
+| `perl`            | Qt configure 脚本依赖 Perl |
+| `python3`         | QtWebEngine 等工具依赖 Python |
 
-> 没这些，根本无法编译源码。
+### 2. GUI/系统库（头文件 + 链接库）
 
-------
-
-# 二、核心库和开发头文件（头文件 + 链接库）
-
-| 包名                 | 作用                                                         |
+| 包名                 | 作用 |
 | -------------------- | ------------------------------------------------------------ |
-| `libglib2.0-dev`     | 提供 GLib 基础库，Qt 依赖一些 GLib 功能                      |
-| `libx11-dev`         | X11 核心库头文件，Qt GUI 需要                                |
-| `libxcb1-dev`        | XCB（X protocol C-language Binding）库，用于 Qt GUI、窗口管理 |
-| `libx11-xcb-dev`     | X11 与 XCB 连接桥接，确保 Qt 可以正确使用 X11                |
-| `libxext-dev`        | X11 扩展库，常用功能                                         |
-| `libxfixes-dev`      | 修复和扩展 X11 功能，用于高级 GUI                            |
-| `libxi-dev`          | X Input extension，鼠标键盘事件支持                          |
-| `libxrender-dev`     | X Render 扩展，绘图和字体渲染用                              |
-| `libxrandr-dev`      | X Resize, Rotate & Reflect 扩展，Qt 窗口旋转、缩放用         |
-| `libfontconfig1-dev` | 字体管理库，Qt 渲染文本必备                                  |
+| `libglib2.0-dev`     | GLib 基础库 |
+| `libx11-dev`         | X11 核心库 |
+| `libxcb1-dev`        | XCB 库，用于 GUI |
+| `libx11-xcb-dev`     | X11 与 XCB 桥接 |
+| `libxext-dev`        | X11 扩展库 |
+| `libxfixes-dev`      | X11 修复与扩展 |
+| `libxi-dev`          | 鼠标键盘事件支持 |
+| `libxrender-dev`     | 绘图与字体渲染 |
+| `libxrandr-dev`      | 窗口旋转、缩放扩展 |
+| `libfontconfig1-dev` | 字体管理 |
 
-------
+### 3. 检查安装状态
 
-# 三、总结一句话
+单个包检查：
 
-这些东西分两类：
-
-1. **编译工具** → gcc、make、perl、python
-2. **GUI/系统库** → X11/XCB、字体、GL、窗口扩展
-
-> 少装一个，你就会在 `./configure` 或 `make` 阶段报错：“找不到 xxx 库” 或 “header file missing”。
-
-------
-
-# 检查安装
-
-# 一、最直接：逐个检查（推荐）
-
-用 `dpkg`：
-
-```
+```bash
 dpkg -s build-essential
 ```
 
-如果已安装，会看到：
+批量检查：
 
-```
-Status: install ok installed
-```
-
-------
-
-## 批量检查（更实用）
-
-```
+```bash
 dpkg -l | grep -E "build-essential|perl|python3|libglib2.0-dev|libx11-dev|libxcb1-dev|libx11-xcb-dev|libxext-dev|libxfixes-dev|libxi-dev|libxrender-dev|libxrandr-dev|libfontconfig1-dev"
 ```
 
-------
+状态标志：
 
-# 二、看状态标志（重点）
-
-输出类似：
-
-```
-ii  libx11-dev     ...
-```
-
-👉 含义：
-
-| 标志 | 含义             |
-| ---- | ---------------- |
-| ii   | 已安装 ✅         |
-| rc   | 已删除但残留配置 |
-| un   | 未安装           |
-
-# 核心流程
-
-你现在已经走到**正确路径**了：用 `Qt-everywhere-src-5.12.2` 自己编译 Qt。
-下面直接给你一套**可落地的生成流程**（按嵌入式/控制器场景，尽量避坑）。
+- `ii` 已安装
+- `rc` 已删除但残留配置
+- `un` 未安装
 
 ------
 
-# 一、解压源码
+## 二、Qt 5.15.5 aarch64 最小化编译
+
+### 1. 核心模块
+
+- QtCore、QtGui、QtWidgets（基础库和 GUI）
+- QtNetwork（网络模块，可选）
+- qtserialbus / qtserialport（工业串口/CAN 功能）
+- QtTools（moc、uic、rcc 等工具）
+- QtTranslations（国际化支持）
+
+### 2. 可跳过模块（节省时间和空间）
+
+- QtQuick/QML 模块：qtdeclarative、qtquickcontrols、qtquickcontrols2、qtquick3d
+- Web 相关：qtwebengine、qtwebview、qtwebchannel、qtwebsockets、qtwebglplugin
+- 多媒体：qtmultimedia、qtspeech
+- 其他：qt3d、qtcharts、qtconnectivity、qtdatavis3d、qtgamepad、qtgraphicaleffects、qtvirtualkeyboard、qtwinextras、qtx11extras、qtlottie、qtremotobjects、qtxmlpatterns
+
+------
+
+### 3. PCH（预编译头文件）
+
+- 用途：加速编译，将公共头文件预编译成二进制缓存
+- 优点：编译速度快
+- 缺点：占用磁盘空间大，交叉编译或小磁盘容易报错
+- Qt 交叉编译建议用 `-no-pch` 禁用
+
+------
+
+### 4. configure 命令（最小化、禁用 PCH）
 
 ```bash
- -
-cd qt-everywhere-src-5.12.2
-```
-
-------
-
-# 二、安装依赖（必须）
-
-在 Debian 下：
-
-```bash
-sudo apt update
-sudo apt install -y \
-build-essential \
-perl \
-python3 \
-git \
-libglib2.0-dev \
-libsm-dev \
-libxrender-dev \
-libfontconfig1-dev \
-libx11-dev \
-libxcb1-dev \
-libx11-xcb-dev \
-libxext-dev \
-libxfixes-dev \
-libxi-dev \
-libxrandr-dev
-```
-
-------
-
-# 三、配置（configure）【核心步骤】
-
-⚠️ 这一步决定你后面是否成功
-
-------
-
-## 1. 最小化配置（推荐你先用这个）
-
-```bash
-./configure \
--prefix /opt/qt5.12.2 \
+../qt-everywhere-src-5.15.5/configure \
+-prefix /opt/aarch64/qt5.15.5 \
 -release \
 -opensource \
 -confirm-license \
 -nomake examples \
 -nomake tests \
--skip qtwebengine \
 -skip qt3d \
+-skip qtcharts \
+-skip qtconnectivity \
+-skip qtdatavis3d \
+-skip qtdeclarative \
 -skip qtgamepad \
--skip qtlocation \
--skip qtscript \
--skip qtwayland
-```
-
-------
-
-或者
-
-```
-./configure \
--prefix /opt/qt5.12.2 \
--release \
--opensource \
--confirm-license \
--xcb \                  # 使用 X11
--opengl es2 \            # ARM 上常用 OpenGL ES2
--nomake examples \       # 不编译示例，节省时间
--nomake tests \          # 不编译测试
--skip qtwebengine \      # 跳过 webengine
--skip qt3d \             # 跳过 3D
--skip qtgamepad          # 跳过游戏手柄模块
-```
-
-
-
-## 2. 如果你是“无GUI设备”（很常见）
-
-👉 用 framebuffer：
-
-```bash
-./configure \
--prefix /opt/qt5.12.2 \
--release \
--opensource \
--confirm-license \
--nomake examples \
--nomake tests \
+-skip qtgraphicaleffects \
+-skip qtmultimedia \
+-skip qtvirtualkeyboard \
+-skip qtwebchannel \
 -skip qtwebengine \
--skip qt3d \
--no-opengl \
--linuxfb
+-skip qtwebview \
+-skip qtwebsockets \
+-skip qtwebglplugin \
+-skip qtwinextras \
+-skip qtx11extras \
+-skip qtlottie \
+-skip qtremoteobjects \
+-skip qtspeech \
+-skip qtxmlpatterns \
+-no-pch
 ```
+
+**注意事项**：
+
+- `-skip` 必须与源码目录模块名称一致，大小写敏感
+- 每行续行符 `\` 必须紧跟行尾，无多余空格
+- 禁用 PCH 可避免 “No space left on device” 错误
 
 ------
 
-## 3. 如果你有X11桌面
-
-X11 桌面启动时，会设置环境变量 `DISPLAY`：
-
-```
-echo $DISPLAY
-```
-
-- 如果输出类似 `:0` 或 `:0.0` → 有 X11
-- 如果没有输出 → 很可能是无头（headless）环境，没有 X11
-
-------
-
-### 二、检查 X11 相关进程
-
-```
-ps aux | grep X
-```
-
-- 正常桌面环境会有类似 `Xorg` 或 `Xwayland` 进程
-- 没有这些 → 说明没有 X11
-
-------
-
-### 三、检查 X11 库是否安装
-
-```
-dpkg -l | grep libx11
-```
-
-- 如果看到 `libx11-dev` 等 → 已安装 X11 库
-- 但是有库不等于运行环境，有可能只是头文件存在
-
-如果已经有了 加上：
+### 5. 编译与安装
 
 ```bash
--xcb
+gmake -j$(nproc)
+sudo gmake install
 ```
 
-------
-
-# 四、开始编译
+- 安装路径：`/opt/aarch64/qt5.15.5`
+- 配置环境变量：
 
 ```bash
-make -j4
+export PATH=/opt/aarch64/qt5.15.5/bin:$PATH
+export LD_LIBRARY_PATH=/opt/aarch64/qt5.15.5/lib:$LD_LIBRARY_PATH
 ```
 
-👉 `-j4` 根据你CPU核数调整：
-
-- 2核 → `-j2`
-- 4核 → `-j4`
-
-------
-
-# 五、安装
-
-```bash
-sudo make install
-```
-
-默认会安装到：
-
-```bash
-/opt/qt5.12.2
-```
-
-------
-
-# 六、配置环境变量
-
-```bash
-vim ~/.bashrc
-```
-
-添加：
-
-```bash
-export QTDIR=/opt/qt5.12.2
-export PATH=$QTDIR/bin:$PATH
-export LD_LIBRARY_PATH=$QTDIR/lib:$LD_LIBRARY_PATH
-```
-
-生效：
-
-```bash
-source ~/.bashrc
-```
-
-------
-
-# 七、验证
+- 验证安装：
 
 ```bash
 qmake -v
 ```
 
-正常输出：
-
-```
-QMake version 3.x
-Using Qt version 5.12.2
-```
-
 ------
 
-# 八、你这个阶段最容易踩的坑
+### 6. 交叉编译器
 
-------
-
-## 1. configure 失败
-
-常见报错：
-
-```
-ERROR: XCB not found
-```
-
-👉 解决：
+- RK3588 CPU 是 aarch64，通用 Linaro 工具链即可
+- 官方 BSP 也自带交叉编译器，适合驱动/板卡开发
+- Ubuntu/Debian 安装示例：
 
 ```bash
-sudo apt install libxcb-xinerama0
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 ```
+
+- 迁移工具链时需完整目录，并设置 PATH / LD_LIBRARY_PATH
 
 ------
 
-## 2. 编译卡死 / 超慢
+### 7. 常见报错
 
-👉 原因：
-
-- qtwebengine 没关（非常大）
-
-✔️ 已帮你在配置里 `-skip` 掉了
+| 报错                                             | 原因               | 解决                         |
+| ------------------------------------------------ | ------------------ | ---------------------------- |
+| `-skip qtbluetooth` / `qtremotobjects`           | 拼写或大小写错误   | 改为源码目录实际名称         |
+| `cannot write PCH file: No space left on device` | 磁盘空间不足       | 删除 `.pch` 或使用 `-no-pch` |
+| `Invalid command line parameter '-prefix'`       | 行续行符或空格错误 | 删除行尾空格或写成一行命令   |
 
 ------
 
-## 3. 内存不够
-
-👉 表现：
-
-```
-Killed
-```
-
-解决：
+### 8. 清理与重新编译
 
 ```bash
-make -j1
+cd ~/qt-build-aarch64
+gmake clean
+rm -rf .pch
+sudo rm -rf /opt/aarch64/qt5.15.5
+sudo mkdir -p /opt/aarch64/qt5.15.5
+sudo chown $USER:$USER /opt/aarch64/qt5.15.5
 ```
 
-------
-
-## 4. 权限问题
-
-```bash
-Permission denied
-```
-
-👉 用：
-
-```bash
-sudo make install
-```
+然后重新执行 configure、gmake 和 gmake install。
 
 ------
 
-# 九、进阶（你后面一定会用到）
+### 9. 最小化编译策略
+
+- 只保留核心模块和工业相关模块
+- 禁用 PCH
+- 跳过示例、测试和不需要模块
+- 减少编译时间和磁盘占用
 
 ------
 
-## 1. 精简 Qt（工业项目推荐）
+### 10. 总结
 
-你其实常用：
+1. 检查 Linux 编译依赖
+2. 清理旧编译和安装目录
+3. configure 时只保留需要模块，禁用 PCH
+4. gmake 编译并 sudo gmake install 安装
+5. 配置环境变量，验证安装
+6. 交叉编译器可用通用 aarch64 工具链
 
-- QtCore
-- QtGui
-- QtWidgets
+> 这样就能在 aarch64 Linux 下干净、高效地编译 Qt 5.15.5，并避免常见报错。
 
-👉 可以进一步裁剪（减少体积）
+# gmake的文件在哪里 
 
-------
-
-## 2. 结合 OpenCV
-
-后面你可以这样用：
-
-```cpp
-#include <opencv2/opencv.hpp>
-#include <QImage>
-```
-
-👉 Qt + OpenCV 在这个环境是完全OK的
+明白了，你现在有三个目录，我们来理清它们各自的作用：
 
 ------
 
-## 十、给你一个更工程化建议（重点）
+## 1. `qt-everywhere-src-5.15.5`
 
-你现在是：
-
-- 工控 / 控制器
-- Qt + C++
-
-👉 推荐流程：
-
-1. PC（x86）开发
-2. 控制器上部署 Qt（你现在做的）
-3. 用 scp / rsync 部署程序
+- **这是 Qt 的源码目录**，你解压的原始源码
+- 里面包含所有模块文件夹（qtbase、qtcharts、qtdeclarative…）
+- 你**不应该直接在这里执行 gmake install**，因为这里是源码，只编译生成中间文件
 
 ------
 
-# 总结一句
+## 2. `~/qt-build-aarch64`
 
-你现在只需要执行三步：
-
-```bash
-./configure ...
-make -j4
-sudo make install
-```
+- **这是你的构建目录**（build directory）
+- 你在这里执行 configure + gmake 的地方
+- 编译生成的 **中间文件**（`.o`、`.gch`、临时工具）都在这里
+- **还没有安装到系统路径**，需要执行 `sudo gmake install` 才会安装
+- 这是你主要操作的目录，进行编译、清理（gmake clean）、配置参数都在这里
 
 ------
 
-如果你下一步想优化（建议你做）：
+## 3. `/opt/aarch64/qt5.15.5`
 
-我可以帮你：
+- **这是安装目录**，你 configure 里的 `-prefix` 指向它
+- 执行 `sudo gmake install` 后，Qt 的库文件、头文件、工具会被安装到这里
+  - `/opt/aarch64/qt5.15.5/bin` → 可执行工具（qmake、moc、uic）
+  - `/opt/aarch64/qt5.15.5/lib` → 库文件
+  - `/opt/aarch64/qt5.15.5/include` → 头文件
 
-- 定制一份 **最小 Qt 编译参数（专门适配你板卡）**
-- 或者帮你做 **交叉编译方案（比现在快10倍）**
+------
 
-你可以把这个发我：
+### 总结：
 
-```bash
-uname -m
-free -h
-```
+| 目录                       | 用途                                           |
+| -------------------------- | ---------------------------------------------- |
+| `qt-everywhere-src-5.15.5` | Qt 源码，不直接编译安装                        |
+| `~/qt-build-aarch64`       | 构建目录，执行 configure + gmake 生成中间文件  |
+| `/opt/aarch64/qt5.15.5`    | 安装目录，执行 `sudo gmake install` 后正式使用 |
 
-我可以帮你把编译参数“收敛到最优”。
+------
+
+所以**你当前编译、生成文件都在 `~/qt-build-aarch64`**，最终可用 Qt 是在 `/opt/aarch64/qt5.15.5`。
