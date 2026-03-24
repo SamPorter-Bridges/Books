@@ -200,6 +200,159 @@ sudo chown $USER:$USER /opt/aarch64/qt5.15.5
 
 > 这样就能在 aarch64 Linux 下干净、高效地编译 Qt 5.15.5，并避免常见报错。
 
+# 检查qmake是不是aarc64的
+
+可以用几种方法验证你生成的 `qmake` 是否针对 **Linux aarch64 g++ 交叉编译器**。核心思路就是查看 `qmake` 内置的 mkspec 和编译器信息。
+
+------
+
+### 方法 1：使用 `qmake -query`
+
+```bash
+/path/to/qmake -query
+```
+
+示例输出（关键部分）：
+
+```text
+QT_SYSROOT:
+QT_INSTALL_PREFIX:/opt/aarch64/qt5.15.5
+QMAKE_SPEC:linux-aarch64-gnu-g++
+QMAKE_CC:aarch64-linux-gnu-gcc
+QMAKE_CXX:aarch64-linux-gnu-g++
+```
+
+- `QMAKE_SPEC` → 当前使用的 mkspec（编译平台配置）
+- `QMAKE_CC` / `QMAKE_CXX` → 指向 aarch64 交叉编译器
+- `QT_INSTALL_PREFIX` → 安装路径（确认 configure 时指定的 `-prefix`）
+
+如果 `QMAKE_SPEC` 是 `linux-aarch64-gnu-g++`，就说明这个 qmake **是 aarch64 Linux 交叉编译版本**。
+
+------
+
+### 方法 2：查看 qmake 的内置信息
+
+```bash
+/path/to/qmake -v
+```
+
+示例输出：
+
+```text
+QMake version 3.1
+Using Qt version 5.15.5 in /opt/aarch64/qt5.15.5/lib
+```
+
+- 不能直接显示 target 架构，但结合 `-query QMAKE_SPEC` 可以判断。
+
+------
+
+### 方法 3：生成测试 Makefile 验证
+
+1. 新建一个简单 Qt 项目目录：
+
+```bash
+mkdir ~/test_qmake
+cd ~/test_qmake
+```
+
+1. 创建 `test.pro`：
+
+```text
+QT       += core
+CONFIG   += console
+TARGET   = test
+SOURCES  = main.cpp
+```
+
+1. 创建 `main.cpp`：
+
+```cpp
+#include <QCoreApplication>
+int main(int argc, char *argv[]) {
+    QCoreApplication a(argc, argv);
+    return 0;
+}
+```
+
+1. 生成 Makefile：
+
+```bash
+/path/to/qmake test.pro
+cat Makefile | grep -E "CXX|CC"
+```
+
+- 你会看到 Makefile 里 `CXX = aarch64-linux-gnu-g++`
+- 说明 qmake 生成的 Makefile **针对 aarch64 交叉编译器**
+
+------
+
+### 总结
+
+- **最简单**：执行
+
+```bash
+/path/to/qmake -query QMAKE_SPEC
+/path/to/qmake -query QMAKE_CC
+/path/to/qmake -query QMAKE_CXX
+```
+
+- 如果输出 `linux-aarch64-gnu-g++` 和 `/usr/bin/aarch64-linux-gnu-g++` → qmake 正确
+- 也可以通过生成一个简单项目 Makefile 再验证一次
+
+------
+
+我可以帮你写一个 **一条命令就能验证 qmake 是否是 aarch64 交叉版本** 的脚本，直接打印结果，方便确认。
+
+你希望我写吗？
+
+# 验证库文件是否是aarc64
+
+基本可以这么理解，但要注意区分 **qmake 本身的 target 配置** 和 **生成的库文件**：
+
+------
+
+### 1. qmake 的作用
+
+- `qmake` 是 Qt 的构建工具，它 **生成 Makefile**，Makefile 里指定了：
+  - 使用的 C/C++ 编译器（`QMAKE_CC` / `QMAKE_CXX`）
+  - 编译器选项（target 架构、ABI）
+  - 链接选项、库路径等
+- 所以，如果 qmake 是针对 `linux-aarch64-gnu-g++` 的，那么用它生成 Makefile 编译出来的 Qt 库 **也会是 aarch64 架构的**。
+
+------
+
+### 2. 验证库文件本身
+
+即使 qmake 配置正确，你也可以额外验证编译后的 `.so` 文件：
+
+```bash
+file /opt/aarch64/qt5.15.5/lib/libQt5Core.so
+```
+
+输出示例：
+
+```text
+libQt5Core.so: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, ...
+```
+
+- 看到 `ARM aarch64` → 确认是 aarch64 架构
+- 这比单纯看 qmake 更直接可靠
+
+------
+
+### 3. 总结
+
+- **qmake 配置**：告诉你生成 Makefile 的交叉编译目标（aarch64）
+- **库文件验证**：确认最终生成的 `.so` 文件确实是 aarch64
+- 两者结合 → 可以完全确认你的 Qt 库是 aarch64 的
+
+------
+
+如果你愿意，我可以帮你写一个 **快速命令脚本**，一次性检查 qmake 配置 + 库文件架构，直接告诉你这个 Qt 是否是 aarch64。
+
+你希望我写吗？
+
 # gmake的文件在哪里 
 
 明白了，你现在有三个目录，我们来理清它们各自的作用：
