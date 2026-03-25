@@ -1,53 +1,60 @@
 # Linux Qt 5.15.5 aarch64 编译指南
 
----
+明白，我帮你整理一张 **针对 Qt 5.15.5 在 aarch64 Linux 上部署、可运行 X11 + xcb 的最小依赖开发包表格**。表格列出了包名、用途/功能，以及是否你已经安装（根据你提供的信息）。这样你在编译 Qt Everywhere 前就可以保证所有依赖到位。
 
-## 一、编译依赖检查
-
-### 1. 编译工具类（必装）
-
-| 包名              | 作用 |
-| ----------------- | ------------------------------------------------------ |
-| `build-essential` | 提供 gcc/g++/make 等基础工具 |
-| `perl`            | Qt configure 脚本依赖 Perl |
-| `python3`         | QtWebEngine 等工具依赖 Python |
-
-### 2. GUI/系统库（头文件 + 链接库）
-
-| 包名                 | 作用 |
-| -------------------- | ------------------------------------------------------------ |
-| `libglib2.0-dev`     | GLib 基础库 |
-| `libx11-dev`         | X11 核心库 |
-| `libxcb1-dev`        | XCB 库，用于 GUI |
-| `libx11-xcb-dev`     | X11 与 XCB 桥接 |
-| `libxext-dev`        | X11 扩展库 |
-| `libxfixes-dev`      | X11 修复与扩展 |
-| `libxi-dev`          | 鼠标键盘事件支持 |
-| `libxrender-dev`     | 绘图与字体渲染 |
-| `libxrandr-dev`      | 窗口旋转、缩放扩展 |
-| `libfontconfig1-dev` | 字体管理 |
-
-### 3. 检查安装状态
-
-单个包检查：
-
-```bash
-dpkg -s build-essential
-```
-
-批量检查：
-
-```bash
-dpkg -l | grep -E "build-essential|perl|python3|libglib2.0-dev|libx11-dev|libxcb1-dev|libx11-xcb-dev|libxext-dev|libxfixes-dev|libxi-dev|libxrender-dev|libxrandr-dev|libfontconfig1-dev"
-```
-
-状态标志：
-
-- `ii` 已安装
-- `rc` 已删除但残留配置
-- `un` 未安装
+| 序号 | 包名                      | 功能 / 作用                             | 安装状态 |
+| ---- | ------------------------- | --------------------------------------- | -------- |
+| 1    | `libxcb1-dev`             | X C Binding 核心开发库，Qt xcb 插件依赖 | 已安装   |
+| 2    | `libx11-dev`              | X11 核心开发库，Qt GUI 基础             | 已安装   |
+| 3    | `libx11-xcb-dev`          | 让 X11 与 XCB 通信的接口开发库          | 已安装   |
+| 4    | `libxcb-render0-dev`      | XCB 渲染扩展库开发文件                  | 已安装   |
+| 5    | `libxkbcommon-dev`        | xkbcommon 核心开发库，键盘映射          | 已安装   |
+| 6    | `libxcb-xinerama0-dev`    | Xinerama 扩展，用于多显示器支持         | 未安装   |
+| 7    | `libxcb-icccm4-dev`       | ICCCM 协议支持（窗口管理器）            | 未安装   |
+| 8    | `libxcb-image0-dev`       | XCB 图像扩展开发库                      | 未安装   |
+| 9    | `libxcb-keysyms1-dev`     | 键盘符号映射支持                        | 未安装   |
+| 10   | `libxcb-randr0-dev`       | RandR 扩展，用于动态屏幕尺寸            | 未安装   |
+| 11   | `libxcb-render-util0-dev` | 渲染实用函数开发库                      | 未安装   |
+| 12   | `libxcb-shape0-dev`       | 窗口形状扩展支持                        | 未安装   |
+| 13   | `libxcb-shm0-dev`         | 共享内存扩展开发库                      | 未安装   |
+| 14   | `libxcb-sync0-dev`        | 同步扩展支持                            | 未安装   |
+| 15   | `libxcb-xfixes0-dev`      | XFixes 扩展，用于窗口修正               | 未安装   |
+| 16   | `libxcb-xkb-dev`          | XKB 扩展接口                            | 未安装   |
+| 17   | `libxkbcommon-x11-dev`    | xkbcommon 与 X11 绑定头文件             | 未安装   |
+| 18   | `libfontconfig1-dev`      | 字体配置库，用于渲染文本                | 建议安装 |
+| 19   | `libfreetype6-dev`        | 字体渲染库                              | 建议安装 |
+| 20   | `libglu1-mesa-dev`        | OpenGL ES2 / GL 支持                    | 建议安装 |
+| 21   | `libgl1-mesa-dev`         | OpenGL 核心开发库                       | 建议安装 |
+| 22   | `libxext-dev`             | X11 扩展库，Qt GUI 常用                 | 建议安装 |
+| 23   | `libxrender-dev`          | X11 渲染扩展                            | 建议安装 |
+| 24   | `libxcb-glx0-dev`         | XCB GL 扩展，用于 OpenGL 渲染           | 建议安装 |
 
 ------
+
+### 说明
+
+1. **前 17 个包**是编译 Qt xcb 插件的 **绝对必须开发包**，否则 configure 会报错。
+2. **18-24 包**是 Qt GUI 最小功能运行所需的支持库，用于字体、OpenGL、渲染等，强烈建议安装。
+3. 已安装/未安装状态是基于你之前的 `dpkg -s` 和 `ls` 信息标注的。
+4. 安装命令示例：
+
+```bash
+sudo apt update
+sudo apt install -y \
+libxcb1-dev libx11-dev libx11-xcb-dev libxcb-render0-dev libxkbcommon-dev \
+libxcb-xinerama0-dev libxcb-icccm4-dev libxcb-image0-dev \
+libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev \
+libxcb-shape0-dev libxcb-shm0-dev libxcb-sync0-dev libxcb-xfixes0-dev \
+libxcb-xkb-dev libxkbcommon-x11-dev \
+libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libgl1-mesa-dev \
+libxext-dev libxrender-dev libxcb-glx0-dev
+```
+
+------
+
+如果你愿意，我可以帮你 **在这个表格基础上，写一个“一条命令安装 + Qt configure 最小化部署命令”完整脚本**，保证可以直接编译出带 xcb 的可部署 Qt。
+
+你希望我直接写吗？
 
 ## 二、Qt 5.15.5 aarch64 最小化编译
 
@@ -77,44 +84,52 @@ dpkg -l | grep -E "build-essential|perl|python3|libglib2.0-dev|libx11-dev|libxcb
 
 ------
 
-### 4. configure 命令（最小化、禁用 PCH）
+### 4. configure 命令
 
-```bash
-../qt-everywhere-src-5.15.5/configure \
--prefix /opt/aarch64/qt5.15.5 \
--release \
--opensource \
--confirm-license \
--nomake examples \
--nomake tests \
--skip qt3d \
--skip qtcharts \
--skip qtconnectivity \
--skip qtdatavis3d \
--skip qtdeclarative \
--skip qtgamepad \
--skip qtgraphicaleffects \
--skip qtmultimedia \
--skip qtvirtualkeyboard \
--skip qtwebchannel \
--skip qtwebengine \
--skip qtwebview \
--skip qtwebsockets \
--skip qtwebglplugin \
--skip qtwinextras \
--skip qtx11extras \
--skip qtlottie \
--skip qtremoteobjects \
--skip qtspeech \
--skip qtxmlpatterns \
--no-pch
+你的这条 `configure` 命令基本上是针对 **最小化、可部署 Qt GUI** 的合理配置，但有几个细节需要注意：
+
+------
+
+#### 分析你的配置
+
+```text
+./configure -release \
+-prefix /mnt/ssd/opt/qt5.15.5 \
+-opensource -confirm-license \
+-nomake examples -nomake tests \
+-xcb -xcb-xlib -bundled-xcb-xinput \
+-opengl es2 \
+-dbus-runtime \
+-skip qtwebengine -skip qt3d -skip qtcanvas3d -skip qtwayland -skip qtgamepad -skip qtvirtualkeyboard
 ```
 
-**注意事项**：
+1. **-release**：只编译 release 版本，占用空间小 ✅
+2. **-prefix /mnt/ssd/opt/qt5.15.5**：安装路径在你的 SSD 上 ✅
+3. **-opensource -confirm-license**：开源版本自动确认 ✅
+4. **-nomake examples -nomake tests**：不编译示例和测试，节省空间 ✅
+5. **-xcb -xcb-xlib -bundled-xcb-xinput**：启用 xcb 插件，支持 X11 GUI ✅
+   - 前提是 **你系统必须安装完整 xcb / X11 / xkbcommon 开发包**
+6. **-opengl es2**：启用 OpenGL ES2 支持，适合嵌入式 ARM / aarch64 ✅
+7. **-dbus-runtime**：启用运行时 D-Bus 支持 ✅
+8. **-skip qtwebengine -skip qt3d -skip qtcanvas3d -skip qtwayland -skip qtgamepad -skip qtvirtualkeyboard**
+   - 这些模块体积大，如果不需要可以跳过 ✅
 
-- `-skip` 必须与源码目录模块名称一致，大小写敏感
-- 每行续行符 `\` 必须紧跟行尾，无多余空格
-- 禁用 PCH 可避免 “No space left on device” 错误
+------
+
+#### 潜在问题或优化建议
+
+1. **xkbcommon-x11**：确保已经安装 `libxkbcommon-x11-dev`，否则 configure 还是会报 `xcb precondition failed`。
+2. **字体 & 渲染支持**：建议至少安装 `libfontconfig1-dev`、`libfreetype6-dev`、`libxrender-dev`，否则 Qt GUI 可能无法正确显示文字或渲染。
+3. **GL / Mesa**：如果要使用 OpenGL 功能，需要 `libglu1-mesa-dev`、`libgl1-mesa-dev`。
+4. **sysroot**：你没有指定 `-sysroot`，如果交叉编译或者使用 chroot/rootfs，可能需要，否则本机编译可以省略。
+
+------
+
+#### 总结
+
+- 如果你已经安装了前面列出的 xcb / X11 / xkbcommon / font / OpenGL 开发包，这条命令可以直接用来编译 **最小化 Qt GUI + xcb 插件**，并部署到 `/mnt/ssd/opt/qt5.15.5`。
+- 跳过模块和 `-nomake` 设置可以节省大量空间。
+- 编译完成后，使用 `linuxdeployqt` 或者手动复制 `/mnt/ssd/opt/qt5.15.5/lib` 下的 `.so` 和 `platforms/libqxcb.so` 就可以部署运行。
 
 ------
 
