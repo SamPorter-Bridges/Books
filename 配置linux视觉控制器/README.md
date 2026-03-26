@@ -641,6 +641,169 @@ add_subdirectory(sub2)
 
 ------
 
-如果你愿意，我可以帮你写一个 **父目录 + 多子目录 + Qt/OpenCV 项目 CMake 模板**，统一 build 目录，所有 exe 都输出到 `build/bin/Debug` / `build/bin/Release`，每行加注释，方便直接放 Typora。
+# 为什么cmakelist生成的软件直接就在控制器里不需要依赖运行？
 
-你希望我写吗？
+明白了，你是 **CMake + VSCode** 而不是 qmake。那 rpath/runpath 指向你 Qt 自定义目录的原因和 `settings.json` 关系不大，主要还是 **CMake 配置和编译器链接器参数** 决定的。
+
+------
+
+### **1. CMake 决定 rpath 的几个地方**
+
+1. **CMAKE_INSTALL_RPATH / CMAKE_BUILD_RPATH**
+
+   - CMake 默认会把 `CMAKE_INSTALL_RPATH` 写入可执行文件，用于安装后的库搜索路径。
+
+   - `CMAKE_BUILD_RPATH` 用于构建目录下运行时加载库。
+
+   - 在 CMakeLists.txt 里可以设置：
+
+     ```cmake
+     set(CMAKE_BUILD_RPATH "/mnt/ssd/opt/qt5.15.5/lib")
+     set(CMAKE_INSTALL_RPATH "/mnt/ssd/opt/qt5.15.5/lib")
+     set(CMAKE_SKIP_BUILD_RPATH FALSE)
+     set(CMAKE_SKIP_INSTALL_RPATH FALSE)
+     set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+     ```
+
+   - 这样 CMake 会在 ELF 可执行文件里写入 `/mnt/ssd/opt/qt5.15.5/lib`。
+
+2. **Qt 的 CMake 配置**
+
+   - 你在 CMake 里用 `find_package(Qt5 COMPONENTS Widgets Gui Core REQUIRED)`
+
+   - CMake 找到 `/mnt/ssd/opt/qt5.15.5/lib/cmake/Qt5`，会把对应库路径写入链接器命令：
+
+     ```
+     -L/mnt/ssd/opt/qt5.15.5/lib -Wl,-rpath,/mnt/ssd/opt/qt5.15.5/lib
+     ```
+
+   - 这就是为什么编译后的可执行文件自动指向你自己 Qt 目录。
+
+3. **手动 target_link_libraries 指定绝对路径**
+
+   ```cmake
+   target_link_libraries(InomvDemo
+       PRIVATE /mnt/ssd/opt/qt5.15.5/lib/libQt5Widgets.so
+               /mnt/ssd/opt/qt5.15.5/lib/libQt5Core.so
+               /mnt/ssd/opt/qt5.15.5/lib/libQt5Gui.so
+   )
+   ```
+
+   - 链接器会直接把这些路径写入 rpath。
+
+------
+
+### **2. settings.json 的作用**
+
+- VSCode 的 `settings.json` 主要影响 **编辑器智能提示/IntelliSense** 和 **CMake Tools 插件**
+
+- 它不会直接修改 ELF 的 rpath
+
+- 如果你在 `CMake Tools: Configure Args` 里指定了 Qt 路径，比如：
+
+  ```
+  -DCMAKE_PREFIX_PATH=/mnt/ssd/opt/qt5.15.5
+  ```
+
+  那 CMake 就会找到你的 Qt 并把路径写入链接命令，从而最终写入 rpath。
+
+------
+
+### **3. 总结**
+
+- **可执行文件指向自定义 Qt 路径**：来源于 CMake 链接器参数和 rpath/runpath
+- **VSCode settings.json**：只影响 CMake 配置，不直接写 rpath
+- **系统 Qt 5.14 不会被加载**：因为 rpath 优先级比系统路径高
+
+------
+
+# rpath/runpath 原理
+
+你这个现象说明，你的可执行文件 `InomvDemo` 在 **编译/链接阶段**就已经把 **Qt 库的绝对路径写入了 ELF 文件的 rpath/runpath**，所以运行时它会优先去你指定的 `/mnt/ssd/opt/qt5.15.5/lib/` 找库，而不是去系统默认路径（系统上有 Qt 5.14 也不会影响）。
+
+------
+
+### **1. rpath/runpath 原理**
+
+在 Linux ELF 可执行文件中，有一段特殊字段：
+
+- **rpath**：指定运行时库搜索路径，会在 LD_LIBRARY_PATH 之前查找
+- **runpath**：现代 Linux 用法，和 rpath 类似，但会被 LD_LIBRARY_PATH 覆盖
+
+你可以查看 `InomvDemo` 的 rpath/runpath：
+
+```bash
+readelf -d InomvDemo | grep PATH
+```
+
+输出示例可能是：
+
+```
+0x000000000000001d (RUNPATH)            Library runpath: [/mnt/ssd/opt/qt5.15.5/lib]
+```
+
+意思就是 **程序运行时会直接去 `/mnt/ssd/opt/qt5.15.5/lib` 查找 Qt 库**。
+
+------
+
+### **2. 为什么会自动指向这个目录**
+
+可能是以下操作导致：
+
+1. **qmake pro 文件里指定了 LIBS 或 QMAKE_RPATHDIR**
+
+   ```pro
+   LIBS += -L/mnt/ssd/opt/qt5.15.5/lib
+   QMAKE_RPATHDIR += /mnt/ssd/opt/qt5.15.5/lib
+   ```
+
+   - `QMAKE_RPATHDIR` 会在编译时把路径写入 ELF 的 rpath/runpath。
+
+2. **qmake + Qt 编译器的默认行为**
+
+   - 当你用 qmake 构建 Qt GUI 程序，并使用非系统 Qt 安装路径（比如你自己编译的 5.15.5），qmake 默认会把 `rpath` 写入可执行文件，使它运行时优先使用这个 Qt 版本。
+
+3. **手动用 patchelf 或 chrpath 设置过**
+
+   - 可以在可执行文件上执行：
+
+     ```bash
+     patchelf --set-rpath /mnt/ssd/opt/qt5.15.5/lib InomvDemo
+     ```
+
+   - 这样运行时会直接去这个目录加载库。
+
+------
+
+### **3. 你系统有 Qt5.14 为什么没被用到**
+
+- 因为 rpath 写入了 `/mnt/ssd/opt/qt5.15.5/lib`
+- Linux 动态链接器优先 rpath/runpath，然后才是 LD_LIBRARY_PATH，再然后才是系统默认路径
+- 所以即使系统有 Qt5.14，也不会被加载
+
+------
+
+### **4. 验证方法**
+
+可以执行：
+
+```bash
+readelf -d InomvDemo | grep PATH
+```
+
+你会看到类似：
+
+```
+RUNPATH            /mnt/ssd/opt/qt5.15.5/lib
+```
+
+也可以用 ldd 看实际加载库：
+
+```bash
+ldd InomvDemo | grep Qt5
+```
+
+会显示 `/mnt/ssd/opt/qt5.15.5/lib/libQt5*.so.5`，说明运行时确实从 rpath 指定的路径加载。
+
+------
+
