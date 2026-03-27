@@ -807,3 +807,269 @@ ldd InomvDemo | grep Qt5
 
 ------
 
+# vscode - cmake导入qt
+
+```cmake
+{
+    "cmake.configureSettings": {
+        "CMAKE_PREFIX_PATH": "E:\\Soft\\Qt5.12.2\\creator\\5.12.2\\msvc2017_64\\lib\\cmake\\Qt5"
+    },
+    "C_Cpp.errorSquiggles": "enabled"
+}
+```
+
+你这个问题涉及 CMake 与 Qt 的配置方式，我帮你详细分析一下区别：
+
+------
+
+### 1. `CMake` 中的 `Qt5_DIR`
+
+- `Qt5_DIR` 是 **指向 Qt5Config.cmake 文件所在的目录**，CMake 会用这个路径来找到 Qt 的包配置文件（Config 文件）从而引入 Qt 模块。
+
+- 典型路径示例：
+
+  ```
+  /opt/Qt5.15.5/lib/cmake/Qt5
+  ```
+
+  这里面有 `Qt5Config.cmake` 文件以及各个模块的子目录。
+
+- 作用：告诉 CMake “去哪里找到 Qt5 的配置文件”，CMake 才能使用 `find_package(Qt5 COMPONENTS Widgets REQUIRED)` 之类的命令。
+
+- **注意**：这个路径必须指向编译/安装后的 Qt 的 CMake 配置目录，而不是源码目录。
+
+------
+
+### 2. `CMake` 中的 `CMAKE_PREFIX_PATH`
+
+- `CMAKE_PREFIX_PATH` 是一个更通用的搜索路径，用来告诉 CMake 去哪里找 **所有的包**（不仅限 Qt）。
+
+- 对于 Qt，CMake 会在 `${CMAKE_PREFIX_PATH}/lib/cmake/Qt5` 下自动查找 `Qt5Config.cmake`。
+
+- 也就是说，如果你设置了：
+
+  ```bash
+  -DCMAKE_PREFIX_PATH=/opt/Qt5.15.5
+  ```
+
+  CMake 会在 `/opt/Qt5.15.5/lib/cmake/Qt5` 下找到配置文件，这样就不必显式指定 `Qt5_DIR`。
+
+- 优点：可以同时让 CMake 找到多个依赖库（Qt、OpenCV、其他自定义库），更通用。
+
+------
+
+### 3. 总结区别
+
+| 配置变量            | 作用                               | 范围       | 适用场景                 |
+| ------------------- | ---------------------------------- | ---------- | ------------------------ |
+| `Qt5_DIR`           | 指向 Qt5Config.cmake 所在目录      | 仅 Qt5     | 精确指定 Qt 位置         |
+| `CMAKE_PREFIX_PATH` | 指向 Qt 安装根目录或任意包前缀路径 | 所有依赖库 | 通用、可批量设置多个依赖 |
+
+- `CMAKE_PREFIX_PATH` 可以指定编译后的路径（安装路径），Qt 编译完安装到某个目录后直接指向根目录即可。
+- `Qt5_DIR` 不能指向根目录，它必须指向 `lib/cmake/Qt5` 或者对应模块的 `Config.cmake` 目录。
+
+------
+
+如果你愿意，我可以帮你写一个 **VSCode CMake Tools 配置示例**，既用 `CMAKE_PREFIX_PATH` 又兼容 `Qt5_DIR`，适合 Linux aarch64 Qt5.15.5 编译后的路径。
+
+你希望我帮你写吗？
+
+# 那究竟是cmake的什么行为影响了rpath
+
+在 Linux 下，可执行文件的 **rpath**（运行时库搜索路径）是由 **链接器在编译/链接阶段设置** 的，影响因素主要有几个：
+
+------
+
+### 1. CMake 的 `CMAKE_INSTALL_RPATH` / `CMAKE_BUILD_RPATH`
+
+- `CMAKE_INSTALL_RPATH`：指定 **安装后的可执行文件** 的 rpath。
+
+- `CMAKE_BUILD_RPATH`：指定 **编译/构建阶段** 可执行文件的 rpath（一般调试用）。
+
+- 示例：
+
+  ```cmake
+  set(CMAKE_INSTALL_RPATH "/opt/Qt5.15.5/lib")
+  set(CMAKE_BUILD_RPATH "/opt/Qt5.15.5/lib")
+  set(CMAKE_SKIP_BUILD_RPATH FALSE)
+  set(CMAKE_SKIP_INSTALL_RPATH FALSE)
+  ```
+
+- 作用：生成的可执行文件在运行时会在 rpath 里查找动态库，不依赖 LD_LIBRARY_PATH 或放在当前目录。
+
+------
+
+### 2. CMake 的 `target_link_libraries` + Qt 模块查找
+
+- 当你用：
+
+  ```cmake
+  find_package(Qt5 COMPONENTS Widgets REQUIRED)
+  target_link_libraries(MyApp Qt5::Widgets)
+  ```
+
+- CMake 会通过 `Qt5Config.cmake` 查到 Qt 库路径，并可能 **自动设置 rpath** 指向 Qt 安装目录（尤其在 Linux 上）。
+
+- 所以你看到可执行文件不需要把 `.so` 拷到当前目录就能运行，很可能就是 Qt 的 CMake 配置自动帮你加了 rpath。
+
+------
+
+### 3. 编译器/链接器的 `-rpath` 参数
+
+- `g++` / `ld` 直接链接时可以手动指定：
+
+  ```bash
+  g++ main.o -o myapp -L/opt/Qt5.15.5/lib -Wl,-rpath,/opt/Qt5.15.5/lib -lQt5Widgets
+  ```
+
+- `-Wl,-rpath,PATH` 会把 PATH 写入可执行文件的 rpath 中。
+
+------
+
+### 4. 系统默认环境
+
+- 如果 LD_LIBRARY_PATH 包含 Qt 库路径，**即使 rpath 没有设置**，可执行文件也能找到动态库。
+- rpath 会覆盖 LD_LIBRARY_PATH（优先级高于环境变量）。
+
+------
+
+### ✅ 总结
+
+影响可执行文件 rpath 的行为主要有三类：
+
+1. **CMake 配置**：`CMAKE_INSTALL_RPATH`、`CMAKE_BUILD_RPATH`，以及 Qt 的 `Qt5Config.cmake` 自动设置。
+2. **链接器命令**：手动使用 `-Wl,-rpath` 或 `-rpath-link`。
+3. **环境因素**：LD_LIBRARY_PATH 或系统默认库路径会影响运行时是否能找到库，但不会写入 rpath。
+
+------
+
+# 那如果把这个程序放到另一个电脑上的时候 是不是就失效了
+
+是的，如果你把可执行文件直接拷到另一台电脑上，很可能 rpath 会“失效”，原因如下：
+
+------
+
+### 1. rpath 是绝对路径
+
+- rpath 在可执行文件里存的是一个 **绝对路径**，比如 `/opt/Qt5.15.5/lib`。
+
+- 当你拷到另一台电脑时，如果这个路径不存在，或者 Qt 库不在这个位置，可执行文件就找不到库，会报错：
+
+  ```
+  error while loading shared libraries: libQt5Widgets.so.5: cannot open shared object file: No such file or directory
+  ```
+
+------
+
+### 2. 解决方案
+
+#### (1) 安装 Qt 并保证路径一致
+
+- 在另一台机器也安装 Qt 并保持安装路径一致，这样 rpath 仍然有效。
+
+#### (2) 使用相对 rpath (`$ORIGIN`)
+
+- 在 CMake 中设置 rpath 为相对路径：
+
+  ```cmake
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+  ```
+
+- `$ORIGIN` 表示 **可执行文件所在目录**。
+
+- 优点：可以把库放在可执行文件旁边或子目录下，不依赖绝对路径。
+
+#### (3) 设置 LD_LIBRARY_PATH
+
+- 在目标机器上，通过环境变量指定动态库位置：
+
+  ```bash
+  export LD_LIBRARY_PATH=/path/to/Qt/lib:$LD_LIBRARY_PATH
+  ./myapp
+  ```
+
+#### (4) 静态编译 Qt
+
+- 将 Qt 编译成静态库，直接链接到可执行文件，这样完全不依赖动态库。
+- 缺点：可执行文件变大，而且静态编译 Qt 需要额外配置。
+
+------
+
+在 CMake 中，`target_link_libraries()` 本身可能会 **间接修改 rpath**，取决于几个因素：
+
+------
+
+### 3. 默认行为
+
+- 如果你在 CMake 中设置了 `CMAKE_INSTALL_RPATH`：
+
+  ```cmake
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+  ```
+
+  这个 rpath 是用来 **安装后的可执行文件** 的。
+
+- `target_link_libraries(MyApp Qt5::Widgets)` 会告诉 CMake 这个 target 需要链接的库。
+
+- 在 **Linux 上**，CMake 默认会根据链接的库路径 **自动添加 build-time rpath**（即 `CMAKE_BUILD_RPATH`），除非你显式关闭。
+
+------
+
+### 4. 控制 rpath 的关键变量
+
+| 变量                                | 说明                                                         |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `CMAKE_BUILD_RPATH`                 | 编译/调试阶段可执行文件的 rpath（默认可能包含 Qt 库路径）    |
+| `CMAKE_INSTALL_RPATH`               | 安装后可执行文件的 rpath（最终 rpath）                       |
+| `CMAKE_SKIP_BUILD_RPATH`            | TRUE 表示编译阶段不写 rpath                                  |
+| `CMAKE_SKIP_INSTALL_RPATH`          | TRUE 表示安装阶段不写 rpath                                  |
+| `CMAKE_INSTALL_RPATH_USE_LINK_PATH` | TRUE 表示自动把链接路径加入 install rpath（会覆盖你手动设置的 rpath） |
+
+------
+
+### 5. 为什么可能被覆盖
+
+- 如果你在设置了：
+
+  ```cmake
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+  ```
+
+- 但是 CMake 默认：
+
+  ```cmake
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  ```
+
+  那么在执行 `target_link_libraries()` 时，CMake 会把 Qt 库所在路径自动加入 rpath，**可能覆盖或者追加你的 `$ORIGIN`**。
+
+------
+
+### 6. 推荐做法
+
+如果你希望保持 `$ORIGIN/../lib` 不被覆盖，需要：
+
+```cmake
+# 保持你自己设置的 rpath，不让 CMake 自动添加库路径
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+
+# 设置最终 rpath
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+
+# 避免在 build 时写入自动 rpath（可选）
+set(CMAKE_SKIP_BUILD_RPATH FALSE)  # 如果你希望 build 时也能运行
+```
+
+然后再做链接：
+
+```cmake
+target_link_libraries(MyApp Qt5::Widgets)
+```
+
+这样最终可执行文件安装后 rpath 就是你指定的 `$ORIGIN/../lib`，不会被 Qt 库路径覆盖。
+
+------
+
+如果你需要，我可以帮你写一份 **完整的 Linux aarch64 Qt5 + CMake rpath 配置示例**，可以直接打包到另一台机器运行，不用拷库，也能保持 `$ORIGIN` 相对路径。
+
+你希望我写吗？
