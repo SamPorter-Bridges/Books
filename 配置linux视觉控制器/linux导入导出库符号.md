@@ -178,3 +178,4 @@ public:
 **总结一句话**：
 Windows 的动态库设计要求明确告诉编译器哪些符号导出、哪些导入，而 Linux 共享库默认全局符号可见，因此导入导出可以统一。
 
+![Windows 动态库 dllexport _ dllimport 流程](/Users/ty/github/Books/配置linux视觉控制器/assets/Windows 动态库 dllexport _ dllimport 流程.png)
