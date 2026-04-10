@@ -402,19 +402,33 @@ struct Data
 
 ## 解决方案
 
-### 1. padding
+小林coding 图解系统 1.5
+
+### 1. padding+对齐
+
+![image-20260410125838893](/Users/ty/github/Books/小林coding/图解操作系统linux+windows/笔记/图解系统笔记-第一章 硬件系统/assets/image-20260410125838893.png)
 
 ```cpp
 char pad[60];
 ```
-
-### 2. 对齐
 
 ```cpp
 alignas(64)
 ```
 
 ------
+
+![image-20260410125515439](/Users/ty/github/Books/小林coding/图解操作系统linux+windows/笔记/图解系统笔记-第一章 硬件系统/assets/image-20260410125515439.png)`__cacheline_aligned_in_smp` 是 **Linux 内核里的一个宏**，作用很明确：
+
+> **在 SMP（多核）环境下，把变量按 cache line 对齐，用来避免伪共享；在单核环境下则什么都不做。**
+
+### 为什么要这么设计
+
+核心原因：
+
+```
+伪共享只在多核 CPU 上才会发生
+```
 
 # 十一、为什么不会读到错误数据
 
